@@ -12,7 +12,20 @@
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        #textarea {
+        .changeinput{
+            display: inline-block;
+            padding:10px;
+            background-color: rgba(255, 0, 0, 0.72);
+            border-radius: 5px ;
+            color: #fff;
+        }
+        .changeinput.center{
+            background-color: #3498db;
+            position: relative;
+            left: 35%;
+            margin-top: 10px;
+        }
+        #downloadDiv {
             display: inline-block;
             padding: 10px 20px;
             font-size: 16px;
@@ -27,7 +40,7 @@
             transition: background-color 0.3s ease;
         }
 
-        #textarea:hover {
+        #downloadDiv:hover {
             background-color: #2980b9;
         }
 
@@ -100,14 +113,13 @@
     <script type="text/babel">
         function Parse() {
             let [resp, setResp] = React.useState([]);
-            let [text, setTextArea] = React.useState(false);
-            let [uniqueFields, setUnique] = React.useState([]);
-            let [fileDisplay,setDisplay]=React.useState('');
+            let [downloadSpace, setDownloadArea] = React.useState(false);
+            let [uniqueFields, setUnique] = React.useState([]);//csv->json data would be stored here
+            let [fileDisplay, setDisplay] = React.useState('');
             React.useEffect(() => {
-                let ele = document.getElementById('textarea');
-                console.log('SET UNIQUE', uniqueFields);
-                if (text && resp.length > 0) {
-                    const csvData = Papa.unparse(resp);
+                let ele = document.getElementById('downloadDiv');
+                if (downloadSpace && resp.length > 0) {
+                    const csvData = Papa.unparse(resp);//returs a string
                     const blob = new Blob([csvData], { type: 'text/csv' });
                     const link = document.createElement('a');
                     link.setAttribute('id', 'downloadable')
@@ -115,6 +127,10 @@
                     link.download = 'data.csv';
                     link.innerHTML = 'DOWNLOAD CSV';
                     ele.appendChild(link);
+                    const JSONtoDisplay = Papa.parse(csvData);
+                    console.log('xyz', JSONtoDisplay.data);
+                    setUnique(JSONtoDisplay.data)
+
                 }
                 else {
                     let link = document.getElementById('downloadable');
@@ -122,6 +138,7 @@
                         ele.removeChild(link);
                     }
                     console.log('Else block');
+                    setUnique([])
                 }
             }, [resp])
             let fun = (ele) => {
@@ -130,7 +147,7 @@
                     setDisplay(file.name);
                     let element = document.getElementById("downloadable");
                     if (element) {
-                        document.getElementById("textarea").removeChild(element);
+                        document.getElementById("downloadDiv").removeChild(element);
                     }
                     if (file) {
                         const reader = new FileReader();
@@ -146,7 +163,7 @@
                     }
                 }
             }
-            function parseFile(data) {
+            let parseFile = (data) => {
                 try {
                     data = data.replace(/[\*]/g, '');
                     const arr = data.split(/\r\n\r\n/g);
@@ -156,75 +173,94 @@
                     for (let i = 1; i < arr.length; i++) {
                         const nested = arr[i].split(/\r\n/g);
                         let obj = {};
+                        let checkForemptyObject = true;
                         nested.forEach((text) => {
                             let fields = text.trim();
                             if (!regex.test(fields)) {
-                                let idx = fields.replace(/-:/g, '').trim();
-                                if (!/^[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-\s]+$/.test(idx) && idx.length != 0) {
+                                let idx = fields.replace(/[-:]/g, '').trim();
+                                if (!/^[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-\s]+$/.test(idx) && idx.length !== 0) {
                                     obj[idx.trim()] = '';
+                                    checkForemptyObject = false;
                                 }
                             }
                             else {
                                 let flag = false;
                                 let ans = fields.match(regex);
                                 let field_ignorecase = ans[1].trim();
-                                let regexp = new RegExp(field_ignorecase, 'i');
-                                set.forEach((val) => {
-                                    val = val.trim();
-                                    if (regexp.test(val)) {
+                                field_ignorecase = field_ignorecase.replace(/\s+/g, ' ').trim();
+                                let regexp1 = new RegExp(field_ignorecase);
+                                let regexp2 = new RegExp(field_ignorecase, 'i');
+                                set.forEach((val) => {//from idx 2 it will loop for 7 times
+                                    if (!regexp1.test(val) && regexp2.test(val)) {
                                         field_ignorecase = val;
                                         flag = true;
+                                        console.log('case mismatched fields:->', field_ignorecase, i);
                                     }
                                 })
                                 if (!flag || set.length === 0) {
                                     set.add(field_ignorecase);
                                 }
                                 obj[field_ignorecase] = ans[2].trim();
+                                checkForemptyObject = false;
                             }
                         })
-                        excel.push(obj);
+                        if (!checkForemptyObject) { excel.push(obj); }
                     }
-                    console.log(excel);
-                    setUnique([...set])
-                    setTextArea(true);
-                    setResp(excel);
+                    console.log('Excel', excel);
+                    if (excel.length === 0) {
+                        setDownloadArea(false);
+                        setResp([]);
+                    } else {
+                        setDownloadArea(true);
+                        setResp([...excel]);
+                    }
                 }
                 catch (err) {
-                    console.log('wrong format');
-                    setTextArea(false);
-                    setResp('WRONG FORMAT');
+                    setDownloadArea(false);
+                    setResp([]);
                 }
             }
             return (
-                <div id='css'>
+                <div>
                     <label htmlFor='file-input'>UPLOAD A TXT FILE
                         <input type='file' id='file-input' onChange={(e) => fun(e)} accept='.txt'></input>
                     </label>
                     <span>{fileDisplay}</span>
-                    {resp.length > 0 && <div id="textarea" className='main'></div>}
-                    {
-                        uniqueFields.length != 0 &&
-                        <table border="2">
-                            <tr>
-                                {
-                                    uniqueFields.map((ele, idx) => (
-                                        <th key={idx}>{ele}</th>
-                                    ))
-                                }
-                            </tr>
-                            {
-                                resp && resp.map((ele, idx) => (
-                                    <tr key={`${idx}#@`}>
+                    {resp.length > 0 && <div id="downloadDiv" className='main'></div>}
+                    <div id='table'>
+                        {
+                            uniqueFields.length !== 0 ?
+                            <div>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            {
+                                                uniqueFields[0].map((ele, idx) => (
+                                                    <th key={idx + '&'}>{ele}</th>
+                                                ))
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {
-                                            Object.entries(ele).map(([key, value]) => (
-                                                value === '' ? <td></td> : <td>{value}</td>
+                                            uniqueFields.map((row, idx) => (
+                                                idx > 0 ?
+                                                    <tr key={idx + '#'}>
+                                                        {
+                                                            row.map((val, idx) => (
+                                                                <td key={idx + '$'}>{val}</td>
+                                                            ))
+                                                        }
+                                                    </tr> : <></>
                                             ))
                                         }
-                                    </tr>
-                                ))
-                            }
-                        </table>
-                    }
+                                    </tbody>
+                                </table>
+                                <center className='changeinput center'>IF NOT EXPECTED OUTPUT THEN CHANGE INPUT FORMAT</center>
+                            </div> :
+                                fileDisplay.length > 0 ? <div className='changeinput'>CHANGE INPUT FORMAT</div> : <></>
+                        }
+                    </div>
                 </div>
             )
         }
